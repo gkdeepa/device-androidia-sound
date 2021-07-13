@@ -54,6 +54,7 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <cutils/log.h>
 #include <cutils/str_parms.h>
@@ -111,6 +112,7 @@ struct pcm_config pcm_config_default = {
     .period_count = 4,
     .format = PCM_FORMAT_S16_LE,
 };
+static int parse_hdmi_device_number();
 
 #define CHANNEL_MASK_MAX 3
 struct audio_device {
@@ -228,7 +230,7 @@ static int start_output_stream(struct stream_out *out)
     struct audio_device *adev = out->dev;
     struct pcm_params *params;
     int device = 0;
-
+    int check_device =0;
     ALOGV("%s enter",__func__);
 
     if ((adev->card < 0) || (adev->device < 0)){
@@ -243,7 +245,8 @@ static int start_output_stream(struct stream_out *out)
         } else {
             adev->device = DEFAULT_DEVICE;
         }
-
+        check_device = parse_hdmi_device_number();
+        ALOGE("get the ON device %d",check_device); 
         ALOGV("%s : Setting default card/ device %d,%d",__func__,adev->card,adev->device);
     }
 
@@ -419,7 +422,49 @@ static int out_set_parameters(struct audio_stream *stream, const char *kvpairs)
     ALOGV("%s exit",__func__);
     return 0;
 }
-
+static int parse_hdmi_device_number()
+{
+    struct mixer *mixer;
+    int card = 0;
+    struct mixer_ctl *ctl;
+    enum mixer_ctl_type mixer_type;
+    unsigned int num_values;
+    unsigned int i,id;
+    bool device_status;
+    card = get_card_number_by_name("PCH"); 
+    ALOGE("Deepa get card number %d",card);
+    mixer = mixer_open(card);
+    if (!mixer) {
+        ALOGE(" Failed to open mixer\n");
+        return -1;
+    }
+    for(i=3; i<20; i++ )
+    {
+       char ctl_name[100] = "HDMI/DP,pcm=";
+       char buffer[10]; 
+       sprintf(buffer, "%d", i);
+       strcat(ctl_name,buffer); 
+       strcat(ctl_name," Jack");
+       ALOGE("device number %d",i);
+       ALOGE("ctl_name %s",ctl_name); 
+       ctl = mixer_get_ctl_by_name(mixer, ctl_name);
+       if(ctl)
+       {
+           ALOGE("Deepa get mixer type");  
+           mixer_type = mixer_ctl_get_type(ctl);
+           num_values = mixer_ctl_get_num_values(ctl);
+           ALOGE("Deepa get mixer type status %d number of values %d",device_status,num_values);
+           device_status = mixer_ctl_get_value(ctl, 1);
+           ALOGV("Deepa mixer_ctl_get_value %s", mixer_ctl_get_value(ctl, 1) ? "On" : "Off");  
+       }
+       if(device_status == 1)
+       {
+          ALOGE("status of device %d is ON",i);
+          return i;
+       }   
+    }
+   return DEFAULT_DEVICE;
+}
 static int parse_channel_map()
 {
     struct mixer *mixer;
